@@ -323,6 +323,20 @@
             padding: 4px;
         }
         
+        .export-single-btn {
+            background: rgba(72, 187, 120, 0.2);
+            border: none;
+            color: #68d391;
+            font-size: 16px;
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 6px;
+        }
+        
+        .export-single-btn:active {
+            background: rgba(72, 187, 120, 0.4);
+        }
+        
         /* Export Section */
         .export-section {
             position: fixed;
@@ -766,12 +780,20 @@
             saveBooks();
             renderScannedList();
             
+            const bookIndex = scannedBooks.length - 1;
+            
             document.getElementById('book-preview').classList.remove('active');
+            
+            // Offer to export immediately
+            if (confirm(`✅ Added "${currentBook.title}"\n\nExport to Obsidian now?`)) {
+                exportSingleBook(bookIndex);
+            }
+            
             currentBook = null;
             
             if (html5QrCode) {
                 html5QrCode.resume();
-                document.getElementById('scanner-status').textContent = '✓ Added! Scan next book...';
+                document.getElementById('scanner-status').textContent = 'Scan next book...';
             }
         }
         
@@ -848,9 +870,7 @@
                         <div class="title">${book.title}</div>
                         <div class="author">${book.author}</div>
                     </div>
-                    <div class="scanned-book-status">
-                        ${book.status === 'finished' ? '✓' : book.status === 'reading' ? '📖' : '📚'}
-                    </div>
+                    <button class="export-single-btn" onclick="exportSingleBook(${index})">📥</button>
                     <button class="remove-btn" onclick="removeBook(${index})">×</button>
                 </div>
             `).join('');
@@ -862,6 +882,56 @@
                 saveBooks();
                 renderScannedList();
             }
+        }
+        
+        function exportSingleBook(index) {
+            const book = scannedBooks[index];
+            if (!book) return;
+            
+            const filename = `${book.title} - ${book.author}`.replace(/[\\/:*?"<>|]/g, '');
+            
+            let frontmatter = `---
+title: "${book.title.replace(/"/g, '\\"')}"
+author: "${book.author.replace(/"/g, '\\"')}"
+format: physical
+status: ${book.status}
+rating: ${book.rating}
+date_added: ${book.date_added}`;
+            
+            if (book.isbn) frontmatter += `\nisbn: "${book.isbn}"`;
+            if (book.pages) frontmatter += `\npages: ${book.pages}`;
+            if (book.publisher) frontmatter += `\npublisher: "${book.publisher.replace(/"/g, '\\"')}"`;
+            if (book.published) frontmatter += `\npublished: "${book.published}"`;
+            if (book.cover) frontmatter += `\ncover: "${book.cover}"`;
+            if (book.categories && book.categories.length > 0) {
+                frontmatter += `\ngenres: [${book.categories.map(c => `"${c}"`).join(', ')}]`;
+            }
+            
+            frontmatter += `\nhighlight_count: 0`;
+            frontmatter += `\n---\n`;
+            
+            let content = frontmatter;
+            
+            if (book.cover) {
+                content += `\n![Cover](${book.cover})\n`;
+            }
+            
+            if (book.description) {
+                content += `\n## Description\n\n${book.description}\n`;
+            }
+            
+            content += `\n## Notes\n\n`;
+            if (book.notes) {
+                content += `${book.notes}\n`;
+            }
+            
+            content += `\n## Highlights\n\n`;
+            
+            downloadFile(filename + '.md', content);
+            
+            // Mark as exported visually (optional: remove from list)
+            // For now just show confirmation
+            alert(`✅ Exported: ${book.title}`);
         }
         
         function saveBooks() {
@@ -882,21 +952,15 @@
                 return;
             }
             
-            // Generate markdown files
+            // Generate markdown for each book
             const files = scannedBooks.map(book => {
                 const filename = `${book.title} - ${book.author}`.replace(/[\\/:*?"<>|]/g, '');
-                
-                const statusMap = {
-                    'to-read': 'to-read',
-                    'reading': 'reading', 
-                    'finished': 'finished'
-                };
                 
                 let frontmatter = `---
 title: "${book.title.replace(/"/g, '\\"')}"
 author: "${book.author.replace(/"/g, '\\"')}"
 format: physical
-status: ${statusMap[book.status]}
+status: ${book.status}
 rating: ${book.rating}
 date_added: ${book.date_added}`;
                 
@@ -909,27 +973,24 @@ date_added: ${book.date_added}`;
                     frontmatter += `\ngenres: [${book.categories.map(c => `"${c}"`).join(', ')}]`;
                 }
                 
+                frontmatter += `\nhighlight_count: 0`;
                 frontmatter += `\n---\n`;
                 
                 let content = frontmatter;
                 
-                // Cover image
                 if (book.cover) {
                     content += `\n![Cover](${book.cover})\n`;
                 }
                 
-                // Description
                 if (book.description) {
                     content += `\n## Description\n\n${book.description}\n`;
                 }
                 
-                // Notes
                 content += `\n## Notes\n\n`;
                 if (book.notes) {
                     content += `${book.notes}\n`;
                 }
                 
-                // Highlights placeholder
                 content += `\n## Highlights\n\n`;
                 
                 return {
@@ -938,30 +999,48 @@ date_added: ${book.date_added}`;
                 };
             });
             
-            // Create and download zip file
-            // For simplicity, we'll download as a single text file with all markdown
-            // In production, you'd use JSZip to create a proper zip
+            // Always create ONE combined file (iOS blocks multiple downloads)
+            const combined = files.map(f => 
+`===============================================================================
+FILE: ${f.filename}
+===============================================================================
+
+${f.content}`
+            ).join('\n\n');
             
-            // Alternative: Download individual files
-            if (files.length === 1) {
-                downloadFile(files[0].filename, files[0].content);
-            } else {
-                // Create a combined file for bulk import
-                const combined = files.map(f => 
-                    `<!-- FILE: ${f.filename} -->\n${f.content}\n\n---\n\n`
-                ).join('');
-                
-                downloadFile('scanned_books_export.md', combined);
-                
-                // Also offer individual downloads
-                if (confirm(`Downloaded combined file.\n\nWould you also like to download ${files.length} individual markdown files?`)) {
-                    files.forEach((f, i) => {
-                        setTimeout(() => downloadFile(f.filename, f.content), i * 500);
-                    });
-                }
-            }
+            // Add instructions at the top
+            const exportContent = `# Scanned Books Export
+# Generated: ${new Date().toISOString().split('T')[0]}
+# Books: ${files.length}
+#
+# INSTRUCTIONS:
+# 1. Open this file on your Mac
+# 2. Run the splitter script (below) to create individual files, OR
+# 3. Manually copy each section into separate .md files in your Obsidian Books folder
+#
+# Each book is separated by a line of === with the filename shown
+#
+# -------- SPLITTER SCRIPT (run on Mac) --------
+# Save this as split_books.py and run: python3 split_books.py exported_file.md
+#
+# import re
+# import sys
+# from pathlib import Path
+# 
+# content = Path(sys.argv[1]).read_text()
+# books = re.split(r'={70,}\\nFILE: (.+?)\\n={70,}\\n\\n', content)[1:]
+# 
+# for i in range(0, len(books), 2):
+#     filename, text = books[i], books[i+1]
+#     Path(filename.strip()).write_text(text.strip())
+#     print(f"Created: {filename.strip()}")
+# -------- END SCRIPT --------
+
+${combined}`;
             
-            alert(`Exported ${files.length} book(s)!\n\nMove the .md files to your Obsidian vault's Books folder.`);
+            downloadFile(`scanned_books_${new Date().toISOString().split('T')[0]}.md`, exportContent);
+            
+            alert(`✅ Exported ${files.length} book(s) in one file!\n\nFind it in Files → Downloads.\n\nTransfer to your Mac and split into individual files for Obsidian.`);
         }
         
         function downloadFile(filename, content) {
