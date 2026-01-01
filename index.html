@@ -537,6 +537,11 @@
         </div>
         
         <div class="notes-section">
+            <label>Tags (comma separated)</label>
+            <input type="text" id="preview-tags" placeholder="e.g. fiction, to-buy-physical, classics" style="width: 100%; padding: 12px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #fff; font-size: 14px; margin-bottom: 12px;">
+        </div>
+        
+        <div class="notes-section">
             <label>Notes (optional)</label>
             <textarea id="preview-notes" placeholder="Any initial thoughts..."></textarea>
         </div>
@@ -738,6 +743,7 @@
             currentStatus = 'to-read';
             updateStars();
             updateStatusButtons();
+            document.getElementById('preview-tags').value = '';
             document.getElementById('preview-notes').value = '';
             
             document.getElementById('book-preview').classList.add('active');
@@ -761,6 +767,7 @@
             currentBook.rating = currentRating;
             currentBook.status = currentStatus;
             currentBook.notes = document.getElementById('preview-notes').value.trim();
+            currentBook.tags = document.getElementById('preview-tags').value.trim();
             
             // Check for duplicates
             const isDuplicate = scannedBooks.some(b => 
@@ -907,6 +914,13 @@ date_added: ${book.date_added}`;
                 frontmatter += `\ngenres: [${book.categories.map(c => `"${c}"`).join(', ')}]`;
             }
             
+            if (book.tags) {
+                const tagList = book.tags.split(',').map(t => t.trim()).filter(t => t);
+                if (tagList.length > 0) {
+                    frontmatter += `\ntags: [${tagList.map(t => `"${t}"`).join(', ')}]`;
+                }
+            }
+            
             frontmatter += `\nhighlight_count: 0`;
             frontmatter += `\n---\n`;
             
@@ -971,6 +985,13 @@ date_added: ${book.date_added}`;
                 if (book.cover) frontmatter += `\ncover: "${book.cover}"`;
                 if (book.categories && book.categories.length > 0) {
                     frontmatter += `\ngenres: [${book.categories.map(c => `"${c}"`).join(', ')}]`;
+                }
+                
+                if (book.tags) {
+                    const tagList = book.tags.split(',').map(t => t.trim()).filter(t => t);
+                    if (tagList.length > 0) {
+                        frontmatter += `\ntags: [${tagList.map(t => `"${t}"`).join(', ')}]`;
+                    }
                 }
                 
                 frontmatter += `\nhighlight_count: 0`;
